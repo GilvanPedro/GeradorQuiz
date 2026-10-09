@@ -1,0 +1,17 @@
+# Blueprint do Render: descreve o serviço da API.
+# Os valores marcados com sync: false NÃO ficam no Git; o Render pede para você digitá-los.
+services:
+  - type: web
+    name: quizlab-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/saude
+    autoDeploy: true
+    envVars:
+      # String de conexão da Neon.
+      - key: DATABASE_URL
+        sync: false
+      # URL do site na Vercel, por exemplo https://quizlab.vercel.app
+      - key: CORS_ORIGENS
+        sync: false
