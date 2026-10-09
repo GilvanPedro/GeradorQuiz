@@ -164,6 +164,11 @@ function data(iso) {
     return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+/** Data compacta para tabelas: 09/10/26, 10:40. */
+function dataCurta(iso) {
+    return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
 function linkDoQuiz(codigo) {
     return `${location.origin}${location.pathname}#/q/${codigo}`;
 }
@@ -1219,7 +1224,7 @@ async function telaRespostas(codigo) {
                     h("td", null, p.semConta ? h("span", { class: "selo" }, "sem conta") : p.email),
                     h("td", { class: "num" }, p.tentativas), h("td", { class: "num" }, pct(p.primeira)),
                     h("td", { class: "num" }, pct(p.ultima)), h("td", { class: "num" }, pct(p.melhor)), h("td", { class: "num" }, pct(p.media)),
-                    h("td", null, data(p.ultimaEm)))))))),
+                    h("td", { class: "sem-quebra" }, dataCurta(p.ultimaEm)))))))),
 
         h("h2", { class: "titulo-secao nao-imprime" }, "Todas as tentativas"),
         h("p", { class: "sub nao-imprime", style: "margin:-8px 0 12px" }, "Abra uma tentativa para ver o que a pessoa marcou em cada questão."),

@@ -395,6 +395,7 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--destaque); wid
 .tabela td { overflow-wrap: anywhere; }
 .tabela .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tabela .larga { width: 40%; }
+.tabela .sem-quebra { white-space: nowrap; }
 .tabela tbody tr:last-child td { border-bottom: 0; }
 .medidor { display: flex; align-items: center; gap: 10px; }
 .medidor .barra { flex: 1; min-width: 50px; height: 8px; }
