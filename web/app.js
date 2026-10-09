@@ -854,6 +854,8 @@ async function telaResponder(codigo) {
                 metodo: "POST",
                 corpo: {
                     nome: semConta ? nome.value.trim() : undefined,
+                    // Em quiz com ordem aleatória: devolve o número do sorteio, para o resultado sair nesta mesma ordem.
+                    sorteio: quiz.sorteio ?? undefined,
                     respostas: [...respostas].map(([alternativaId, valor]) => ({ alternativaId, valor })),
                 },
             });
@@ -872,7 +874,9 @@ async function telaResponder(codigo) {
         }
     }
 
-    return h("form", { class: "responder", novalidate: true, onsubmit: mandar },
+    // autocomplete off: impede o navegador de "lembrar" marcações antigas ao recarregar, o que num quiz de ordem
+    // sorteada marcaria outra alternativa na mesma posição.
+    return h("form", { class: "responder", novalidate: true, autocomplete: "off", onsubmit: mandar },
         h("div", { class: "cabecalho" }, h("div", null,
             seloTema(quiz.tema),
             h("h1", null, quiz.titulo),
@@ -1065,6 +1069,10 @@ function desenharResultado(t) {
         !t.quiz.disponivel && h("p", { class: "nota" }, t.questoes.length
             ? "Este quiz foi excluído por quem criou. O seu resultado continua guardado aqui, mas não dá mais para refazer."
             : "Este quiz foi excluído por quem criou. A nota continua guardada, mas a análise das questões não está mais disponível."),
+        t.ordemVista && h("p", { class: "rodape" }, t.quiz.disponivel
+            ? "Este quiz tem ordem aleatória. As questões e alternativas abaixo estão na ordem em que apareceram para você nesta tentativa; ao refazer, a ordem muda."
+            : "As questões e alternativas abaixo estão na ordem em que apareceram para você nesta tentativa."),
+        !t.minha && t.questoes.length > 0 && h("p", { class: "rodape" }, "As questões estão na ordem original do quiz, a mesma do relatório. Se o quiz tem ordem aleatória, a pessoa pode ter visto em outra ordem."),
         filtro,
         lista,
         h("div", { class: "barra-final" },

@@ -593,6 +593,80 @@ class QuizLabTest {
                 .andExpect(jsonPath("$.questoes[0].enunciado").value("Capital da França?"));
     }
 
+    @Test
+    void resultadoSaiNaOrdemEmQueAPessoaViuOQuiz() throws Exception {
+        String ana = novaPessoa("Ana");
+        String codigo = JsonPath.read(corpo(enviarQuiz(ana, QUIZ.formatted(true)
+                .replaceFirst("\\{", "{\"embaralharQuestoes\": true, \"embaralharAlternativas\": true, "))), "$.codigo");
+        String bia = novaPessoa("Bia");
+
+        for (int rodada = 0; rodada < 25; rodada++) {
+            String visto = corpo(mvc.perform(comToken(get("/api/quizzes/" + codigo), bia))
+                    .andExpect(jsonPath("$.sorteio").isNumber()));
+            long sorteio = ((Number) JsonPath.read(visto, "$.sorteio")).longValue();
+            List<String> questoesVistas = JsonPath.read(visto, "$.questoes[*].enunciado");
+            List<String> alternativasVistas = JsonPath.read(visto, "$.questoes[*].alternativas[*].texto");
+            // Marca a primeira alternativa que apareceu na primeira questão que apareceu.
+            int marcada = JsonPath.read(visto, "$.questoes[0].alternativas[0].id");
+
+            String resultado = corpo(responder(bia, codigo, """
+                    {"sorteio": %d, "respostas": [{"alternativaId": %d, "valor": true}]}""".formatted(sorteio, marcada))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.ordemVista").value(true))
+                    // O que ela marcou continua sendo a primeira coisa na tela.
+                    .andExpect(jsonPath("$.questoes[0].alternativas[0].id").value(marcada))
+                    .andExpect(jsonPath("$.questoes[0].alternativas[0].valor").value(true))
+                    // E só isso está marcado.
+                    .andExpect(jsonPath("$..alternativas[?(@.valor != null)]", hasSize(1))));
+            assertThat(JsonPath.<List<String>>read(resultado, "$.questoes[*].enunciado")).isEqualTo(questoesVistas);
+            assertThat(JsonPath.<List<String>>read(resultado, "$.questoes[*].alternativas[*].texto"))
+                    .isEqualTo(alternativasVistas);
+
+            int tentativa = JsonPath.read(resultado, "$.id");
+            // Reabrindo depois pelo histórico, a ordem é a mesma.
+            String depois = corpo(mvc.perform(comToken(get("/api/tentativas/" + tentativa), bia)));
+            assertThat(JsonPath.<List<String>>read(depois, "$.questoes[*].alternativas[*].texto"))
+                    .isEqualTo(alternativasVistas);
+            // O autor vê na ordem em que escreveu, a mesma do relatório, com a mesma marcação.
+            mvc.perform(comToken(get("/api/tentativas/" + tentativa), ana))
+                    .andExpect(jsonPath("$.ordemVista").value(false))
+                    .andExpect(jsonPath("$.questoes[0].enunciado").value("Capital da França?"))
+                    .andExpect(jsonPath("$.questoes[0].alternativas[1].texto").value("Paris"))
+                    .andExpect(jsonPath("$.questoes[2].alternativas[3].texto").value("Um triângulo tem quatro lados"))
+                    .andExpect(jsonPath("$..alternativas[?(@.id == " + marcada + ")].valor").value(true));
+        }
+
+        // Excluído o quiz, a cópia guardada para quem respondeu continua na ordem que ela viu.
+        String visto = corpo(mvc.perform(comToken(get("/api/quizzes/" + codigo), bia)));
+        List<String> alternativasVistas = JsonPath.read(visto, "$.questoes[*].alternativas[*].texto");
+        int tentativa = JsonPath.read(corpo(responder(bia, codigo, """
+                {"sorteio": %d, "respostas": []}""".formatted(((Number) JsonPath.read(visto, "$.sorteio")).longValue()))), "$.id");
+        mvc.perform(comToken(delete("/api/quizzes/" + codigo), ana)).andExpect(status().isNoContent());
+        String guardado = corpo(mvc.perform(comToken(get("/api/tentativas/" + tentativa), bia))
+                .andExpect(jsonPath("$.ordemVista").value(true)));
+        assertThat(JsonPath.<List<String>>read(guardado, "$.questoes[*].alternativas[*].texto")).isEqualTo(alternativasVistas);
+    }
+
+    @Test
+    void semSorteioOResultadoSegueAOrdemDoAutor() throws Exception {
+        String ana = novaPessoa("Ana");
+        String fixo = criarQuiz(ana, true);
+        mvc.perform(comToken(get("/api/quizzes/" + fixo), ana)).andExpect(jsonPath("$.sorteio").doesNotExist());
+        // Mandar um número de sorteio para um quiz sem ordem aleatória não muda nada.
+        responder(ana, fixo, "{\"sorteio\": 12345, \"respostas\": []}")
+                .andExpect(jsonPath("$.ordemVista").value(false))
+                .andExpect(jsonPath("$.questoes[0].enunciado").value("Capital da França?"))
+                .andExpect(jsonPath("$.questoes[0].alternativas[0].texto").value("Lyon"));
+
+        // Quiz sorteado respondido sem o número (tentativas antigas, ou outro cliente): ordem do autor.
+        String sorteado = JsonPath.read(corpo(enviarQuiz(ana, QUIZ.formatted(true)
+                .replaceFirst("\\{", "{\"embaralharQuestoes\": true, \"embaralharAlternativas\": true, "))), "$.codigo");
+        responder(ana, sorteado, "{\"respostas\": []}")
+                .andExpect(jsonPath("$.ordemVista").value(false))
+                .andExpect(jsonPath("$.questoes[0].enunciado").value("Capital da França?"))
+                .andExpect(jsonPath("$.questoes[0].alternativas[0].texto").value("Lyon"));
+    }
+
     // ---------- relatório do autor ----------
 
     @Test

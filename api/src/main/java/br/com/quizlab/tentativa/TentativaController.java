@@ -112,16 +112,21 @@ public class TentativaController {
         }
 
         int total = quiz.getQuestoes().size();
+        // A semente só muda a ordem em que a própria pessoa verá o resultado; não entra na correção.
+        boolean sorteia = quiz.isEmbaralharQuestoes() || quiz.isEmbaralharAlternativas();
+        Long semente = sorteia ? pedido.sorteio() : null;
         if (eu == null) {
             byte[] bytes = new byte[32];
             sorteio.nextBytes(bytes);
             String chave = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
             Tentativa tentativa = tentativas.save(
-                    Tentativa.deConvidado(quiz, nome, Sessoes.resumo(chave), pontos, total, marcacoes));
+                    Tentativa.deConvidado(quiz, nome, Sessoes.resumo(chave), pontos, total, marcacoes)
+                            .vistaNaOrdem(semente));
             return analises.detalheDoConvidado(tentativa, chave);
         }
         Tentativa tentativa = tentativas.save(
-                new Tentativa(quiz, usuarios.getReferenceById(eu.id()), pontos, total, marcacoes));
+                new Tentativa(quiz, usuarios.getReferenceById(eu.id()), pontos, total, marcacoes)
+                        .vistaNaOrdem(semente));
         return analises.detalhe(tentativa, eu.id());
     }
 

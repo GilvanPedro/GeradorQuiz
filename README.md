@@ -40,6 +40,7 @@ gráficos. Quem recebe o link responde em poucos cliques, com ou sem conta, e v�
 
 - **Explicação por questão** (opcional), mostrada a quem responde depois do envio.
 - **Ordem aleatória** (opcional) das questões, das alternativas ou das duas, sorteada a cada abertura do quiz.
+  Quem responde vê o resultado na mesma ordem em que respondeu; o autor vê tudo na ordem em que escreveu.
 - **Compartilhamento por link.** O quiz pode ser público (aparece em *Explorar*) ou acessível só por quem tem o link.
 - **Importar e exportar** quizzes em [arquivo JSON](#arquivo-de-quiz), para montar as questões fora do site.
 - **Relatório** de cada quiz:
@@ -195,7 +196,7 @@ cd api
 mvn test
 ```
 
-São 32 testes, quase todos de integração: sobem a aplicação inteira contra um banco em memória e exercitam a API
+São 34 testes, quase todos de integração: sobem a aplicação inteira contra um banco em memória e exercitam a API
 de ponta a ponta. Cobrem cadastro e login, permissões, a correção de cada tipo de questão, edição e exclusão,
 resposta sem conta, ordem aleatória, o relatório e as regras de conta.
 
@@ -382,6 +383,7 @@ erDiagram
         bigint quiz_id FK "nulo se o quiz foi excluído"
         bigint usuario_id FK "nulo se respondeu sem conta"
         varchar convidado_nome
+        bigint ordem_semente "ordem sorteada vista pela pessoa"
         numeric pontos
         integer total
         varchar analise "cópia em JSON, gravada ao excluir o quiz"
@@ -395,7 +397,7 @@ erDiagram
 
 As definições completas estão nas migrações, em
 [`api/src/main/resources/db/migration`](api/src/main/resources/db/migration). Para mudar o banco, crie um arquivo
-novo (`V5__descricao.sql`); os já aplicados não devem ser editados.
+novo (`V6__descricao.sql`); os já aplicados não devem ser editados.
 
 ## API
 
@@ -465,7 +467,8 @@ julgamento de cada afirmação. O que não for enviado conta como em branco.
 - Não há recuperação de senha nem confirmação de e-mail: quem esquece a senha não tem como recuperar a conta.
 - Sem conta, a identificação é só pelo nome digitado, que qualquer pessoa pode repetir.
 - O limite de envios sem conta fica na memória da API e zera quando ela reinicia.
-- O resultado e o relatório sempre seguem a ordem original das questões, mesmo com a ordem aleatória ligada.
+- Em quizzes com ordem aleatória, o relatório e a análise vistos pelo autor seguem a ordem original das questões;
+  só quem respondeu vê a ordem sorteada daquela tentativa.
 - O autor não consegue apagar uma tentativa específica do relatório.
 
 ---

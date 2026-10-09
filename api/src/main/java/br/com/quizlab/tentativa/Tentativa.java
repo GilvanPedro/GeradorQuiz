@@ -34,6 +34,8 @@ public class Tentativa {
     @ManyToOne(fetch = FetchType.LAZY)
     private Usuario usuario;
     private String convidadoNome;
+    /** A semente da ordem que a pessoa viu, em quizzes com sorteio (ver OrdemSorteada). */
+    private Long ordemSemente;
     /** SHA-256 da chave que permite ao convidado ficar com a tentativa ao criar uma conta. */
     private String chaveHash;
     // Cópia do que identifica o quiz, para o histórico continuar legível depois que ele for excluído.
@@ -68,6 +70,16 @@ public class Tentativa {
         this.total = total;
         this.feitaEm = Instant.now();
         this.respostas.addAll(respostas);
+    }
+
+    /** Anota a ordem em que o quiz foi visto. Só faz sentido em quizzes com ordem aleatória. */
+    Tentativa vistaNaOrdem(Long semente) {
+        this.ordemSemente = semente;
+        return this;
+    }
+
+    public Long getOrdemSemente() {
+        return ordemSemente;
     }
 
     /** Tentativa de quem respondeu sem conta. */

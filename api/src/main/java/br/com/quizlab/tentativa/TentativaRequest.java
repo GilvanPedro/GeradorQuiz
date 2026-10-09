@@ -11,6 +11,9 @@ import java.util.List;
  * cada afirmação. O que não vier conta como em branco.
  */
 public record TentativaRequest(
+        /** O número de sorteio que veio com o quiz, quando ele tem ordem aleatória. */
+        Long sorteio,
+
         /** Obrigatório só para quem responde sem conta. */
         @Size(max = 80, message = "O nome pode ter no máximo 80 caracteres.")
         String nome,

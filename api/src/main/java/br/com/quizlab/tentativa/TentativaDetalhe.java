@@ -9,11 +9,12 @@ import java.util.List;
 /**
  * A análise de uma tentativa: cada questão com o que foi marcado, o gabarito e a explicação. {@code chave} só vem
  * preenchida na resposta a quem acabou de responder sem conta: é o que permite guardar a tentativa numa conta.
+ * {@code ordemVista} diz que as questões estão na ordem sorteada em que a pessoa respondeu, e não na do autor.
  */
 public record TentativaDetalhe(Long id, QuizDaTentativa quiz, String respondente, String email, boolean semConta,
                                boolean minha,
-                               BigDecimal pontos, int total, Instant feitaEm, List<QuestaoCorrigida> questoes,
-                               String chave) {
+                               BigDecimal pontos, int total, Instant feitaEm, boolean ordemVista,
+                               List<QuestaoCorrigida> questoes, String chave) {
 
     /** {@code disponivel} é falso (e {@code codigo} nulo) quando o quiz foi excluído e não dá mais para refazer. */
     public record QuizDaTentativa(String codigo, String titulo, String tema, String autor, boolean disponivel) {

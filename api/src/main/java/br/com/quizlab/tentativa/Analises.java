@@ -1,5 +1,7 @@
 package br.com.quizlab.tentativa;
 
+import br.com.quizlab.quiz.Alternativa;
+import br.com.quizlab.quiz.OrdemSorteada;
 import br.com.quizlab.quiz.Questao;
 import br.com.quizlab.quiz.Quiz;
 import br.com.quizlab.quiz.QuizRepository;
@@ -49,13 +51,17 @@ public class Analises {
 
     private TentativaDetalhe detalhe(Tentativa tentativa, boolean minha, String chave) {
         Quiz quiz = tentativa.getQuiz();
-        List<QuestaoCorrigida> questoes = quiz != null ? corrigir(tentativa, quiz) : congeladas(tentativa);
+        // Quem respondeu vê o resultado na ordem em que o quiz apareceu para ela. O autor vê na ordem que escreveu,
+        // que é a mesma do relatório.
+        Long semente = minha ? tentativa.getOrdemSemente() : null;
+        List<QuestaoCorrigida> questoes = quiz != null ? corrigir(tentativa, quiz, semente) : congeladas(tentativa);
         return new TentativaDetalhe(tentativa.getId(),
                 new QuizDaTentativa(quiz == null ? null : quiz.getCodigo(), tentativa.getQuizTitulo(),
                         tentativa.getQuizTema(), tentativa.getQuizAutor(), quiz != null),
                 tentativa.getRespondente(), tentativa.isSemConta() ? null : tentativa.getUsuario().getEmail(),
                 tentativa.isSemConta(), minha,
-                tentativa.getPontos(), tentativa.getTotal(), tentativa.getFeitaEm(), questoes, chave);
+                tentativa.getPontos(), tentativa.getTotal(), tentativa.getFeitaEm(),
+                tentativa.getOrdemSemente() != null && (minha || quiz == null), questoes, chave);
     }
 
     /** Apaga o quiz e tudo o que é dele, deixando em cada tentativa só a nota e a análise pronta. */
@@ -70,7 +76,8 @@ public class Analises {
                 // Ninguém tem histórico para guardar isto: sai junto com o quiz.
                 tentativas.delete(tentativa);
             } else {
-                tentativa.congelar(paraJson(corrigir(tentativa, quiz)));
+                // A cópia é para quem respondeu, então fica na ordem que ela viu.
+                tentativa.congelar(paraJson(corrigir(tentativa, quiz, tentativa.getOrdemSemente())));
             }
         }
         // As respostas precisam sair antes das alternativas que elas apontam.
@@ -78,14 +85,15 @@ public class Analises {
         quizzes.delete(quiz);
     }
 
-    private static List<QuestaoCorrigida> corrigir(Tentativa tentativa, Quiz quiz) {
+    private static List<QuestaoCorrigida> corrigir(Tentativa tentativa, Quiz quiz, Long semente) {
         Map<Long, Boolean> valores = new HashMap<>();
         tentativa.getRespostas().forEach(m -> valores.put(m.alternativaId(), m.valor()));
-        return quiz.getQuestoes().stream().map(q -> corrigir(q, valores)).toList();
+        return OrdemSorteada.questoes(quiz, semente).stream()
+                .map(q -> corrigir(q, OrdemSorteada.alternativas(quiz, q, semente), valores)).toList();
     }
 
-    private static QuestaoCorrigida corrigir(Questao questao, Map<Long, Boolean> valores) {
-        List<AlternativaCorrigida> alternativas = questao.getAlternativas().stream()
+    private static QuestaoCorrigida corrigir(Questao questao, List<Alternativa> naOrdem, Map<Long, Boolean> valores) {
+        List<AlternativaCorrigida> alternativas = naOrdem.stream()
                 .map(a -> new AlternativaCorrigida(a.getId(), a.getTexto(), a.isCorreta(), valores.get(a.getId())))
                 .toList();
         return new QuestaoCorrigida(questao.getId(), questao.getTipo(), questao.getEnunciado(),
