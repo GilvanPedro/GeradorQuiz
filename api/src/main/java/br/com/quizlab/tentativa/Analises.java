@@ -38,13 +38,23 @@ public class Analises {
     }
 
     TentativaDetalhe detalhe(Tentativa tentativa, Long quemPede) {
+        boolean minha = !tentativa.isSemConta() && tentativa.getUsuario().getId().equals(quemPede);
+        return detalhe(tentativa, minha, null);
+    }
+
+    /** O que o convidado recebe logo depois de responder: a análise e a chave para guardar numa conta. */
+    TentativaDetalhe detalheDoConvidado(Tentativa tentativa, String chave) {
+        return detalhe(tentativa, true, chave);
+    }
+
+    private TentativaDetalhe detalhe(Tentativa tentativa, boolean minha, String chave) {
         Quiz quiz = tentativa.getQuiz();
         List<QuestaoCorrigida> questoes = quiz != null ? corrigir(tentativa, quiz) : congeladas(tentativa);
         return new TentativaDetalhe(tentativa.getId(),
                 new QuizDaTentativa(quiz == null ? null : quiz.getCodigo(), tentativa.getQuizTitulo(),
                         tentativa.getQuizTema(), tentativa.getQuizAutor(), quiz != null),
-                tentativa.getUsuario().getNome(), tentativa.getUsuario().getId().equals(quemPede),
-                tentativa.getPontos(), tentativa.getTotal(), tentativa.getFeitaEm(), questoes);
+                tentativa.getRespondente(), tentativa.isSemConta(), minha,
+                tentativa.getPontos(), tentativa.getTotal(), tentativa.getFeitaEm(), questoes, chave);
     }
 
     /** Apaga o quiz e tudo o que é dele, deixando em cada tentativa só a nota e a análise pronta. */
@@ -55,7 +65,12 @@ public class Analises {
             return;
         }
         for (Tentativa tentativa : tentativas.findByQuizId(quizId)) {
-            tentativa.congelar(paraJson(corrigir(tentativa, quiz)));
+            if (tentativa.isSemConta()) {
+                // Ninguém tem histórico para guardar isto: sai junto com o quiz.
+                tentativas.delete(tentativa);
+            } else {
+                tentativa.congelar(paraJson(corrigir(tentativa, quiz)));
+            }
         }
         // As respostas precisam sair antes das alternativas que elas apontam.
         tentativas.flush();

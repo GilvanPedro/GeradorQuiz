@@ -664,10 +664,155 @@ class QuizLabTest {
         mvc.perform(comToken(get("/api/quizzes/" + codigo + "/relatorio"), bia)).andExpect(status().isForbidden());
     }
 
+    // ---------- responder sem conta ----------
+
+    @Test
+    void quemTemOLinkRespondeSemContaInformandoUmNome() throws Exception {
+        String ana = novaPessoa("Ana");
+        String codigo = criarQuiz(ana, false);
+
+        // Abre sem login, e continua sem receber o gabarito.
+        String quiz = corpo(mvc.perform(get("/api/quizzes/" + codigo))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.meu").value(false))
+                .andExpect(jsonPath("$.questoes", hasSize(3))));
+        assertThat(quiz).doesNotContain("correta").doesNotContain("explicacao");
+
+        responderSemConta(codigo, "", "[]").andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.erro").value("Informe o seu nome para responder."));
+        String paris = """
+                [{"alternativaId": %d, "valor": true}]""".formatted(id(quiz, 0, 1));
+        String resultado = corpo(responderSemConta(codigo, "  Zé da Silva ", paris)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.respondente").value("Zé da Silva"))
+                .andExpect(jsonPath("$.semConta").value(true))
+                .andExpect(jsonPath("$.minha").value(true))
+                .andExpect(jsonPath("$.pontos").value(1))
+                .andExpect(jsonPath("$.chave").isNotEmpty())
+                .andExpect(jsonPath("$.questoes[0].explicacao").value("Paris é a capital desde 987.")));
+        int tentativa = JsonPath.read(resultado, "$.id");
+        String chave = JsonPath.read(resultado, "$.chave");
+        // A chave não fica guardada como veio, só o resumo dela.
+        assertThat(banco.queryForObject("select chave_hash from tentativa where id = ?", String.class, tentativa))
+                .hasSize(64).isNotEqualTo(chave);
+
+        // Sem conta não há histórico: o resultado só existe na resposta acima.
+        mvc.perform(get("/api/tentativas/" + tentativa)).andExpect(status().isUnauthorized());
+        mvc.perform(comToken(get("/api/tentativas/" + tentativa), novaPessoa("Curiosa"))).andExpect(status().isNotFound());
+        // O resto do site continua fechado.
+        mvc.perform(get("/api/quizzes/meus")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/quizzes/" + codigo + "/edicao")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/quizzes/" + codigo + "/relatorio")).andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/quizzes/" + codigo).header(HttpHeaders.AUTHORIZATION, "Bearer vencido"))
+                .andExpect(status().isUnauthorized());
+
+        // O autor vê a tentativa e o que a pessoa marcou.
+        mvc.perform(comToken(get("/api/tentativas/" + tentativa), ana))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.respondente").value("Zé da Silva"))
+                .andExpect(jsonPath("$.semConta").value(true))
+                .andExpect(jsonPath("$.minha").value(false))
+                .andExpect(jsonPath("$.chave").isEmpty())
+                .andExpect(jsonPath("$.questoes[0].alternativas[1].valor").value(true));
+        // E não pode mais mudar as questões.
+        mvc.perform(comToken(put("/api/quizzes/" + codigo), ana)
+                        .contentType(MediaType.APPLICATION_JSON).content(QUIZ.formatted(true)))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void relatorioJuntaPeloNomeQuemRespondeuSemConta() throws Exception {
+        String ana = novaPessoa("Ana");
+        String codigo = criarQuiz(ana, true);
+        responderSemConta(codigo, "Zé da Silva", "[]");
+        responderSemConta(codigo, "  zé  da SILVA ", "[]");
+        responderSemConta(codigo, "Maria", "[]");
+        // Uma pessoa com conta e o mesmo nome não se mistura com o convidado.
+        responder(novaPessoa("Maria"), codigo, "{\"respostas\": []}");
+
+        String relatorio = corpo(mvc.perform(comToken(get("/api/quizzes/" + codigo + "/relatorio"), ana))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resumo.tentativas").value(4))
+                .andExpect(jsonPath("$.resumo.pessoas").value(3))
+                .andExpect(jsonPath("$.pessoas[0].tentativas").value(2))
+                .andExpect(jsonPath("$.pessoas[0].semConta").value(true))
+                .andExpect(jsonPath("$.tentativas", hasSize(4))));
+        assertThat(JsonPath.<String>read(relatorio, "$.pessoas[0].nome")).isEqualToIgnoringWhitespace("zé da SILVA");
+        List<Boolean> marias = JsonPath.read(relatorio, "$.pessoas[?(@.nome == 'Maria')].semConta");
+        assertThat(marias).containsExactlyInAnyOrder(true, false);
+        List<Boolean> semConta = JsonPath.read(relatorio, "$.tentativas[*].semConta");
+        assertThat(semConta).containsExactlyInAnyOrder(true, true, true, false);
+        mvc.perform(comToken(get("/api/quizzes/" + codigo + "/tentativas"), ana)).andExpect(jsonPath("$", hasSize(4)));
+    }
+
+    @Test
+    void quemCriaContaDepoisDeResponderFicaComOResultado() throws Exception {
+        String ana = novaPessoa("Ana");
+        String codigo = criarQuiz(ana, true);
+        String resultado = corpo(responderSemConta(codigo, "Zé", "[]"));
+        int tentativa = JsonPath.read(resultado, "$.id");
+        String chave = JsonPath.read(resultado, "$.chave");
+
+        String ze = novaPessoa("José da Silva");
+        reivindicar(ze, tentativa, "chave-inventada").andExpect(status().isNotFound());
+        mvc.perform(post("/api/tentativas/" + tentativa + "/reivindicar").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"chave\": \"%s\"}".formatted(chave))).andExpect(status().isUnauthorized());
+        reivindicar(ze, tentativa, chave).andExpect(status().isNoContent());
+
+        // Agora está no histórico dele, e o autor passa a ver o nome da conta.
+        mvc.perform(comToken(get("/api/tentativas"), ze))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id").value(tentativa));
+        mvc.perform(comToken(get("/api/tentativas/" + tentativa), ze))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.minha").value(true))
+                .andExpect(jsonPath("$.semConta").value(false));
+        mvc.perform(comToken(get("/api/quizzes/" + codigo + "/relatorio"), ana))
+                .andExpect(jsonPath("$.pessoas", hasSize(1)))
+                .andExpect(jsonPath("$.pessoas[0].nome").value("José da Silva"))
+                .andExpect(jsonPath("$.pessoas[0].semConta").value(false));
+
+        // A chave vale uma vez só.
+        reivindicar(novaPessoa("Esperto"), tentativa, chave).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void chaveDoConvidadoVencePoucoDepois() throws Exception {
+        String codigo = criarQuiz(novaPessoa("Ana"), true);
+        String resultado = corpo(responderSemConta(codigo, "Zé", "[]"));
+        int tentativa = JsonPath.read(resultado, "$.id");
+        banco.update("update tentativa set feita_em = ? where id = ?", OffsetDateTime.now(ZoneOffset.UTC).minusHours(25), tentativa);
+
+        reivindicar(novaPessoa("José"), tentativa, JsonPath.read(resultado, "$.chave")).andExpect(status().isNotFound());
+    }
+
+    @Test
+    void excluirOQuizApagaAsTentativasDeQuemNaoTemConta() throws Exception {
+        String ana = novaPessoa("Ana");
+        String codigo = criarQuiz(ana, true);
+        int tentativa = JsonPath.read(corpo(responderSemConta(codigo, "Zé", "[]")), "$.id");
+
+        mvc.perform(comToken(delete("/api/quizzes/" + codigo), ana)).andExpect(status().isNoContent());
+
+        assertThat(contar("select count(*) from tentativa where id = ?", (long) tentativa)).isZero();
+    }
+
     // ---------- apoio ----------
 
     private long contar(String sql, Object... parametros) {
         return banco.queryForObject(sql, Long.class, parametros);
+    }
+
+    private ResultActions responderSemConta(String codigo, String nome, String respostas) throws Exception {
+        String corpo = """
+                {"nome": "%s", "respostas": %s}""".formatted(nome, respostas);
+        return mvc.perform(post("/api/quizzes/" + codigo + "/tentativas")
+                .contentType(MediaType.APPLICATION_JSON).content(corpo));
+    }
+
+    private ResultActions reivindicar(String token, int tentativa, String chave) throws Exception {
+        return mvc.perform(comToken(post("/api/tentativas/" + tentativa + "/reivindicar"), token)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"chave\": \"%s\"}".formatted(chave)));
     }
 
     private ResultActions trocarSenha(String token, String atual, String nova) throws Exception {

@@ -88,7 +88,7 @@ public class Sessoes {
     }
 
     /** O token já é aleatório e longo, então um SHA-256 simples basta (diferente das senhas, que usam BCrypt). */
-    static String resumo(String token) {
+    public static String resumo(String token) {
         try {
             byte[] hash = MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8));
             return HexFormat.of().formatHex(hash);

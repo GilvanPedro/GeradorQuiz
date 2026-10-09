@@ -4,7 +4,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-/** Tudo exige login, menos criar conta, entrar, sair e /api/saude. */
+/** Tudo passa pelo interceptor, menos criar conta, entrar, sair e /api/saude. Ele decide o que exige login. */
 @Configuration
 public class AutenticacaoConfig implements WebMvcConfigurer {
 

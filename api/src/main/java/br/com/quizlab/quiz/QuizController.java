@@ -71,12 +71,12 @@ public class QuizController {
         return new QuizCriado(quiz.getCodigo());
     }
 
-    /** Qualquer pessoa logada que tenha o link pode abrir, mesmo que o quiz não esteja na lista pública. */
+    /** Quem tem o link pode abrir, com ou sem conta, mesmo que o quiz não esteja na lista pública. */
     @GetMapping("/{codigo}")
     @Transactional(readOnly = true)
     public QuizParaResponder abrir(@PathVariable String codigo,
-                                   @RequestAttribute(UsuarioLogado.ATRIBUTO) UsuarioLogado eu) {
-        return QuizParaResponder.de(quizzes.exigir(codigo), eu.id());
+                                   @RequestAttribute(value = UsuarioLogado.ATRIBUTO, required = false) UsuarioLogado eu) {
+        return QuizParaResponder.de(quizzes.exigir(codigo), eu == null ? null : eu.id());
     }
 
     @GetMapping("/{codigo}/edicao")
@@ -133,7 +133,7 @@ public class QuizController {
     }
 
     private boolean respondidoPorOutros(Quiz quiz, UsuarioLogado eu) {
-        return tentativas.existsByQuizIdAndUsuarioIdNot(quiz.getId(), eu.id());
+        return tentativas.respondidoPorOutros(quiz.getId(), eu.id());
     }
 
     /** Regras que dependem do tipo da questão. */

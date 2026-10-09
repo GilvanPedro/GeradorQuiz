@@ -10,7 +10,7 @@ Site para criar quizzes de questões objetivas, compartilhar por link e acompanh
 
 ## O que já funciona
 
-- **Conta:** nome, e-mail e senha. A senha é guardada só como hash BCrypt, nunca em texto. Tudo exige login.
+- **Conta:** nome, e-mail e senha. A senha é guardada só como hash BCrypt, nunca em texto.
   Em *Minha conta* dá para mudar o nome de exibição, trocar a senha (pede a atual e desconecta os outros
   aparelhos) e excluir a conta.
 - **Um e-mail, uma conta.** O e-mail só volta a ficar livre se a conta for excluída ou passar 5 anos sem nenhum
@@ -20,7 +20,10 @@ Site para criar quizzes de questões objetivas, compartilhar por link e acompanh
   - *Caixas de seleção:* uma ou mais corretas; só pontua quem marca exatamente elas.
   - *Verdadeiro ou falso:* uma ou mais afirmações para julgar; acertar parte delas dá ponto proporcional.
 - **Compartilhar:** cada quiz tem um link (`…/#/q/codigo`). Marcado como público, também aparece em *Explorar*.
-  Quem abre o link sem conta cria uma e volta direto para o quiz.
+- **Responder sem conta:** quem recebe o link responde informando só um nome. No fim vê o resultado completo e
+  um convite para criar conta. Se criar (ou entrar) em seguida, aquela tentativa vai para o histórico dela; se
+  não, o resultado some ao sair da página. Para o autor, a tentativa aparece no relatório marcada como "sem
+  conta", e quem não tem conta é reconhecido pelo nome digitado. O resto do site continua exigindo login.
 - **Meus resultados:** todo quiz respondido fica no histórico, com nota, acerto por tema e a análise de cada
   questão: o que foi marcado, a resposta certa e a explicação do autor.
 - **Ordem aleatória (opcional):** o autor pode sortear a ordem das questões, a das alternativas, ou as duas. O
@@ -33,6 +36,12 @@ Site para criar quizzes de questões objetivas, compartilhar por link e acompanh
 
 Regras que valem saber:
 
+- Sem conta, a pessoa só é reconhecida pelo nome: "Ana Lima" e "ana  lima" contam como a mesma, e duas pessoas
+  que digitarem o mesmo nome se misturam no relatório.
+- Para ninguém encher um relatório de respostas falsas, há um teto de 30 envios sem conta a cada 10 minutos por
+  endereço de rede. Uma turma inteira no mesmo wi-fi pode bater nesse teto; o número fica em
+  [`LimiteDeConvidados.java`](api/src/main/java/br/com/quizlab/tentativa/LimiteDeConvidados.java).
+- Quando um quiz é excluído, as tentativas de quem não tem conta são apagadas junto.
 - O gabarito nunca vai para o navegador de quem está respondendo; a correção é feita na API.
 - Depois que outra pessoa responde, as questões do quiz não podem mais ser editadas (o resultado dela perderia o
   sentido). Dá para mudar a visibilidade ou excluir.
@@ -133,7 +142,8 @@ site avisa quando isso acontece. As sessões ficam no banco, então ninguém é 
 
 ## API
 
-Tudo exige `Authorization: Bearer <token>`, menos criar conta, login, logout e `/api/saude`. Erros voltam como
+Tudo exige `Authorization: Bearer <token>`, menos criar conta, login, logout, `/api/saude` e as duas rotas de
+abrir e responder um quiz, que também funcionam sem conta. Erros voltam como
 `{"erro": "mensagem"}`.
 
 | Método e caminho | O que faz |
@@ -150,7 +160,8 @@ Tudo exige `Authorization: Bearer <token>`, menos criar conta, login, logout e `
 | `GET /api/quizzes/{codigo}/edicao`, `PUT /api/quizzes/{codigo}` | Abrir e salvar a edição (só o autor) |
 | `PUT /api/quizzes/{codigo}/publico` | Publicar ou tirar do Explorar |
 | `DELETE /api/quizzes/{codigo}` | Excluir |
-| `POST /api/quizzes/{codigo}/tentativas` | Envia as respostas e devolve a análise |
+| `POST /api/quizzes/{codigo}/tentativas` | Envia as respostas e devolve a análise. Sem conta, pede `nome` e devolve uma `chave` |
+| `POST /api/tentativas/{id}/reivindicar` | Guarda na conta uma tentativa feita sem conta (pede a `chave`, até 24 h depois) |
 | `GET /api/quizzes/{codigo}/tentativas` | Quem respondeu (só o autor) |
 | `GET /api/quizzes/{codigo}/relatorio` | Relatório completo do quiz (só o autor) |
 | `GET /api/tentativas`, `GET /api/tentativas/{id}` | Histórico e análise de uma tentativa |

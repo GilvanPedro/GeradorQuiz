@@ -38,7 +38,8 @@ public record Relatorio(QuizDoRelatorio quiz, Instant geradoEm, Resumo resumo, L
     public record AlternativaDoRelatorio(String texto, boolean correta, int marcadas, int falsas) {
     }
 
-    public record PessoaDoRelatorio(String nome, int tentativas, double melhor, double media, double primeira,
+    /** Quem respondeu sem conta ({@code semConta}) é agrupado pelo nome que digitou. */
+    public record PessoaDoRelatorio(String nome, boolean semConta, int tentativas, double melhor, double media, double primeira,
                                     double ultima, Instant ultimaEm) {
     }
 }

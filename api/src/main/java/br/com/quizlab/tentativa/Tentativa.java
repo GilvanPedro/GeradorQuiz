@@ -30,8 +30,12 @@ public class Tentativa {
     /** Nulo depois que o quiz é excluído. */
     @ManyToOne(fetch = FetchType.LAZY)
     private Quiz quiz;
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    /** Nulo quando a pessoa respondeu sem conta; nesse caso vale {@link #convidadoNome}. */
+    @ManyToOne(fetch = FetchType.LAZY)
     private Usuario usuario;
+    private String convidadoNome;
+    /** SHA-256 da chave que permite ao convidado ficar com a tentativa ao criar uma conta. */
+    private String chaveHash;
     // Cópia do que identifica o quiz, para o histórico continuar legível depois que ele for excluído.
     private String quizTitulo;
     private String quizTema;
@@ -64,6 +68,30 @@ public class Tentativa {
         this.total = total;
         this.feitaEm = Instant.now();
         this.respostas.addAll(respostas);
+    }
+
+    /** Tentativa de quem respondeu sem conta. */
+    static Tentativa deConvidado(Quiz quiz, String nome, String chaveHash, BigDecimal pontos, int total,
+                                 List<Marcacao> respostas) {
+        Tentativa tentativa = new Tentativa(quiz, null, pontos, total, respostas);
+        tentativa.convidadoNome = nome;
+        tentativa.chaveHash = chaveHash;
+        return tentativa;
+    }
+
+    /** O convidado criou uma conta (ou entrou): a tentativa passa a ser dela e entra no histórico. */
+    void entregarA(Usuario usuario) {
+        this.usuario = usuario;
+        this.convidadoNome = null;
+        this.chaveHash = null;
+    }
+
+    public boolean isSemConta() {
+        return usuario == null;
+    }
+
+    public String getRespondente() {
+        return usuario == null ? convidadoNome : usuario.getNome();
     }
 
     /** Troca a ligação com o quiz e as respostas marcadas pela análise pronta, para o quiz poder ser apagado. */

@@ -23,7 +23,33 @@ function h(tag, props, ...filhos) {
 
 const CHAVE_SESSAO = "quizlab.sessao";
 const CHAVE_DESTINO = "quizlab.destino";
+const CHAVE_PENDENTE = "quizlab.pendente";
+const CHAVE_NOME = "quizlab.nome";
 let sessao = lerSessao();
+
+/**
+ * O resultado de quem acabou de responder sem conta. Fica só na memória desta página, de propósito: recarregou ou
+ * fechou, sumiu. O que vai para o armazenamento da aba é só o id e a chave da tentativa, para ela poder ser
+ * guardada na conta se a pessoa criar uma logo em seguida.
+ */
+let resultadoSemConta = null;
+
+function guardarNaAba(chave, valor) {
+    try {
+        if (valor == null) sessionStorage.removeItem(chave);
+        else sessionStorage.setItem(chave, JSON.stringify(valor));
+    } catch {
+        // Sem armazenamento, só se perde a conveniência.
+    }
+}
+
+function lerDaAba(chave) {
+    try {
+        return JSON.parse(sessionStorage.getItem(chave));
+    } catch {
+        return null;
+    }
+}
 
 function lerSessao() {
     try {
@@ -75,8 +101,13 @@ async function api(caminho, { metodo = "GET", corpo } = {}) {
     if (resposta.status === 401 && sessao) {
         // O token venceu ou foi encerrado em outro lugar: volta para o login e retoma de onde estava.
         guardarSessao(null);
-        lembrarDestino(caminhoAtual());
-        location.hash = "#/entrar";
+        if (caminhoAtual().startsWith("/q/")) {
+            // Um quiz abre sem conta, então dá para continuar na mesma página.
+            navegar();
+        } else {
+            lembrarDestino(caminhoAtual());
+            location.hash = "#/entrar";
+        }
         throw new Error("A sua sessão terminou. Entre de novo.");
     }
     if (!resposta.ok) throw new Error(dados?.erro || "Algo deu errado. Tente de novo.");
@@ -172,6 +203,7 @@ function seloTema(tema) {
 
 function telaConta(criando) {
     const veioDeUmQuiz = (lerDestino() || "").startsWith("/q/");
+    const pendente = lerDaAba(CHAVE_PENDENTE);
     const erro = h("p", { class: "erro", role: "alert", hidden: true });
     const botao = h("button", { type: "submit", class: "botao primario largo" }, criando ? "Criar conta" : "Entrar");
 
@@ -180,8 +212,11 @@ function telaConta(criando) {
 
     const form = h("form", { class: "cartao form-conta", novalidate: true, onsubmit: enviar },
         h("h1", null, criando ? "Criar conta" : "Entrar"),
-        h("p", { class: "sub" }, veioDeUmQuiz
-            ? "Para responder o quiz que você recebeu, entre ou crie uma conta. É rápido."
+        h("p", { class: "sub" }, pendente
+            ? (criando ? "Crie a conta e o resultado do quiz que você acabou de responder vai para o seu histórico."
+                : "Entre e o resultado do quiz que você acabou de responder vai para o seu histórico.")
+            : veioDeUmQuiz
+            ? "Entre para responder com a sua conta e guardar o resultado no histórico."
             : criando ? "Com uma conta você responde quizzes, cria os seus e acompanha os seus resultados."
                 : "Entre para responder quizzes e ver os seus resultados."),
         criando && campo("Nome", { name: "nome", autocomplete: "name", maxLength: 80 }),
@@ -206,7 +241,20 @@ function telaConta(criando) {
         botao.disabled = true;
         try {
             guardarSessao(await api(criando ? "/api/contas" : "/api/login", { metodo: "POST", corpo: dados }));
-            location.hash = "#" + (pegarDestino() || "/");
+            let destino = pegarDestino() || "/";
+            if (pendente) {
+                guardarNaAba(CHAVE_PENDENTE, null);
+                resultadoSemConta = null;
+                try {
+                    await api(`/api/tentativas/${pendente.id}/reivindicar`, { metodo: "POST", corpo: { chave: pendente.chave } });
+                    destino = "/resultado/" + pendente.id;
+                    recado("Resultado guardado no seu histórico.");
+                } catch {
+                    // A conta foi criada de qualquer jeito; só o resultado é que não pôde ser guardado.
+                    recado("A conta está pronta, mas não foi possível guardar aquele resultado.");
+                }
+            }
+            location.hash = "#" + destino;
         } catch (e) {
             mostrar(e.message);
         } finally {
@@ -749,6 +797,11 @@ async function telaResponder(codigo) {
     const respostas = new Map();
     const erro = h("p", { class: "erro", role: "alert", hidden: true });
     const enviar = h("button", { type: "submit", class: "botao primario" }, "Enviar respostas");
+    const semConta = !sessao;
+    const nome = semConta && h("input", {
+        type: "text", name: "nome", maxLength: 80, required: true, autocomplete: "name",
+        placeholder: "Como você quer aparecer para quem criou o quiz", value: lerDaAba(CHAVE_NOME) || "",
+    });
 
     const questoes = quiz.questoes.map((questao, indice) => {
         const alternativas = questao.alternativas.map(alternativa => {
@@ -780,6 +833,12 @@ async function telaResponder(codigo) {
 
     async function mandar(evento) {
         evento.preventDefault();
+        if (semConta && !nome.value.trim()) {
+            erro.textContent = "Informe o seu nome para enviar as respostas.";
+            erro.hidden = false;
+            nome.focus();
+            return;
+        }
         const emBranco = quiz.questoes.filter(q => !q.alternativas.some(a => respostas.has(a.id))).length;
         if (emBranco && !window.confirm(`${plural(emBranco, "questão ficou", "questões ficaram")} em branco. Enviar mesmo assim?`)) return;
 
@@ -788,9 +847,19 @@ async function telaResponder(codigo) {
         try {
             const resultado = await api(`/api/quizzes/${codigo}/tentativas`, {
                 metodo: "POST",
-                corpo: { respostas: [...respostas].map(([alternativaId, valor]) => ({ alternativaId, valor })) },
+                corpo: {
+                    nome: semConta ? nome.value.trim() : undefined,
+                    respostas: [...respostas].map(([alternativaId, valor]) => ({ alternativaId, valor })),
+                },
             });
-            location.hash = "#/resultado/" + resultado.id;
+            if (resultado.chave) {
+                resultadoSemConta = resultado;
+                guardarNaAba(CHAVE_PENDENTE, { id: resultado.id, chave: resultado.chave });
+                guardarNaAba(CHAVE_NOME, nome.value.trim());
+                location.hash = "#/resultado-sem-conta";
+            } else {
+                location.hash = "#/resultado/" + resultado.id;
+            }
         } catch (e) {
             erro.textContent = e.message;
             erro.hidden = false;
@@ -804,6 +873,12 @@ async function telaResponder(codigo) {
             h("h1", null, quiz.titulo),
             quiz.descricao && h("p", { class: "sub" }, quiz.descricao),
             h("p", { class: "rodape" }, `${plural(quiz.questoes.length, "questão", "questões")} · por ${quiz.autor}`))),
+        semConta && h("section", { class: "cartao sem-conta" },
+            h("label", { class: "campo" }, h("span", null, "Seu nome"), nome,
+                h("small", null, "Você está respondendo sem conta. Quem criou o quiz vai ver este nome junto com as suas respostas.")),
+            h("p", { class: "rodape" }, "Já tem conta? ",
+                h("a", { href: "#/entrar", onclick: () => lembrarDestino(caminhoAtual()) }, "Entre"),
+                " para guardar o resultado no seu histórico.")),
         quiz.meu && h("p", { class: "nota" }, "Este quiz é seu. Responder serve como teste: se você editar as questões depois, o seu resultado de teste é apagado."),
         questoes,
         erro,
@@ -822,6 +897,7 @@ function linhaDeTentativa(t, quem) {
             h("strong", null, quem || t.titulo),
             h("small", null, `${numero(t.pontos)} de ${t.total} · ${data(t.feitaEm)}`)),
         !quem && seloTema(t.tema),
+        quem && t.semConta && h("span", { class: "selo" }, "sem conta"),
         h("span", { class: "seta", "aria-hidden": "true" }, "›"));
 }
 
@@ -901,7 +977,21 @@ function alternativaCorrigida(questao, a) {
 }
 
 async function telaResultado(id) {
-    const t = await api("/api/tentativas/" + id);
+    return desenharResultado(await api("/api/tentativas/" + id));
+}
+
+/** O resultado de quem respondeu sem conta: existe só enquanto esta página estiver aberta. */
+function telaResultadoSemConta() {
+    if (!resultadoSemConta || sessao) {
+        return vazio("Este resultado não está mais disponível",
+            "Quem responde sem conta vê o resultado uma vez só. Para guardar os próximos, crie uma conta.",
+            h("a", { class: "botao primario", href: sessao ? "#/resultados" : "#/criar-conta" }, sessao ? "Meus resultados" : "Criar conta"));
+    }
+    return desenharResultado(resultadoSemConta);
+}
+
+function desenharResultado(t) {
+    const semConta = !sessao && Boolean(t.chave);
     const p = porcento(t.pontos, t.total);
     const contagem = { certa: 0, parcial: 0, errada: 0, branco: 0 };
     t.questoes.forEach(q => { contagem[situacao(q).chave]++; });
@@ -933,11 +1023,27 @@ async function telaResultado(id) {
         : p >= 40 ? "Dá para melhorar. Revise as questões marcadas abaixo."
         : "Vale revisar o conteúdo. As respostas certas estão abaixo.";
 
+    // Convite para criar conta, mostrado uma vez logo que o resultado aparece.
+    const convite = semConta && !t.conviteMostrado && h("dialog", { class: "popup", "aria-labelledby": "convite-titulo" },
+        h("h2", { id: "convite-titulo" }, "Quer guardar este resultado?"),
+        h("p", null, "Você respondeu sem conta, então este resultado some quando você sair desta página."),
+        h("p", null, "Criando uma conta agora, ele vai para o seu histórico e você pode rever a análise quando quiser."),
+        h("div", { class: "barra-final" },
+            h("button", { type: "button", class: "botao", onclick: () => convite.close() }, "Agora não"),
+            h("a", { class: "botao primario", href: "#/criar-conta" }, "Criar conta")));
+    if (convite) {
+        t.conviteMostrado = true;
+        // Só dá para abrir depois que a tela estiver na página.
+        setTimeout(() => { if (convite.isConnected) convite.showModal(); }, 0);
+    }
+
     return h("div", { class: "resultado" },
+        convite,
         h("section", { class: "cartao placar" },
             h("div", { class: "nota-circulo grande " + faixa(p) }, p + "%"),
             h("div", null,
-                h("p", { class: "rodape" }, t.minha ? "Seu resultado em" : `Resultado de ${t.respondente} em`),
+                h("p", { class: "rodape" }, t.minha ? "Seu resultado em"
+                    : `Resultado de ${t.respondente}${t.semConta ? " (sem conta)" : ""} em`),
                 h("h1", null, t.quiz.titulo),
                 h("p", { class: "sub" }, `${numero(t.pontos)} de ${plural(t.total, "ponto", "pontos")} · ${data(t.feitaEm)}`),
                 h("div", { class: "selos" },
@@ -946,16 +1052,21 @@ async function telaResultado(id) {
                     parte(contagem.errada, "errada", "erradas", "errada"),
                     parte(contagem.branco, "em branco", "em branco", "branco")),
                 frase && h("p", { class: "frase" }, frase))),
+        semConta && h("p", { class: "nota" },
+            "Este resultado não fica guardado: ao sair desta página, ele some. ",
+            h("a", { href: "#/criar-conta" }, "Crie uma conta"), " ou ", h("a", { href: "#/entrar" }, "entre"),
+            " para guardá-lo no seu histórico."),
         !t.quiz.disponivel && h("p", { class: "nota" }, t.questoes.length
             ? "Este quiz foi excluído por quem criou. O seu resultado continua guardado aqui, mas não dá mais para refazer."
             : "Este quiz foi excluído por quem criou. A nota continua guardada, mas a análise das questões não está mais disponível."),
         filtro,
         lista,
         h("div", { class: "barra-final" },
-            t.minha
-                ? h("a", { class: "botao", href: "#/resultados" }, "Meus resultados")
+            semConta ? h("a", { class: "botao", href: "#/q/" + t.quiz.codigo }, "Refazer o quiz")
+                : t.minha ? h("a", { class: "botao", href: "#/resultados" }, "Meus resultados")
                 : h("a", { class: "botao", href: "#/respostas/" + t.quiz.codigo }, "Voltar ao relatório"),
-            t.minha && t.quiz.disponivel && h("a", { class: "botao primario", href: "#/q/" + t.quiz.codigo }, "Refazer o quiz")));
+            semConta ? h("a", { class: "botao primario", href: "#/criar-conta" }, "Criar conta e guardar")
+                : t.minha && t.quiz.disponivel && h("a", { class: "botao primario", href: "#/q/" + t.quiz.codigo }, "Refazer o quiz")));
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -1038,10 +1149,10 @@ function relatorioEmCsv(r) {
             ...r.questoes.flatMap(q => q.alternativas.map(a => [q.numero, a.texto,
                 q.tipo === "VERDADEIRO_FALSO" ? (a.correta ? "Verdadeira" : "Falsa") : (a.correta ? "Correta" : ""),
                 a.marcadas, q.tipo === "VERDADEIRO_FALSO" ? a.falsas : ""]))],
-        [["Pessoas"], ["Nome", "Tentativas", "Primeira nota (%)", "Última nota (%)", "Melhor nota (%)", "Média (%)", "Última tentativa"],
-            ...r.pessoas.map(p => [p.nome, p.tentativas, p.primeira, p.ultima, p.melhor, p.media, data(p.ultimaEm)])],
-        [["Tentativas"], ["Pessoa", "Pontos", "Total", "Nota (%)", "Data"],
-            ...r.tentativas.map(t => [t.respondente, t.pontos, t.total, porcento(t.pontos, t.total), data(t.feitaEm)])],
+        [["Pessoas"], ["Nome", "Tem conta", "Tentativas", "Primeira nota (%)", "Última nota (%)", "Melhor nota (%)", "Média (%)", "Última tentativa"],
+            ...r.pessoas.map(p => [p.nome, p.semConta ? "Não" : "Sim", p.tentativas, p.primeira, p.ultima, p.melhor, p.media, data(p.ultimaEm)])],
+        [["Tentativas"], ["Pessoa", "Tem conta", "Pontos", "Total", "Nota (%)", "Data"],
+            ...r.tentativas.map(t => [t.respondente, t.semConta ? "Não" : "Sim", t.pontos, t.total, porcento(t.pontos, t.total), data(t.feitaEm)])],
     ];
     // Ponto e vírgula e BOM: é o que o Excel em português espera para abrir direto com acentos e colunas certas.
     return "﻿" + secoes.map(linhas => linhas.map(l => l.map(celula).join(";")).join("\r\n")).join("\r\n\r\n") + "\r\n";
@@ -1095,14 +1206,16 @@ async function telaRespostas(codigo) {
 
         h("section", { class: "cartao bloco" },
             h("h2", null, "Por pessoa"),
-            h("p", { class: "sub" }, "Quantas vezes cada pessoa fez o quiz e como foi. Quem fez mais vezes aparece primeiro."),
+            h("p", { class: "sub" }, "Quantas vezes cada pessoa fez o quiz e como foi. Quem fez mais vezes aparece primeiro. "
+                + "Quem respondeu sem conta é reconhecido só pelo nome que digitou: nomes iguais contam como a mesma pessoa."),
             h("div", { class: "rolagem" }, h("table", { class: "tabela" },
                 h("thead", null, h("tr", null,
                     h("th", null, "Pessoa"), h("th", { class: "num" }, "Tentativas"), h("th", { class: "num" }, "Primeira"),
                     h("th", { class: "num" }, "Última"), h("th", { class: "num" }, "Melhor"), h("th", { class: "num" }, "Média"),
                     h("th", null, "Última tentativa"))),
                 h("tbody", null, r.pessoas.map(p => h("tr", null,
-                    h("td", null, p.nome), h("td", { class: "num" }, p.tentativas), h("td", { class: "num" }, pct(p.primeira)),
+                    h("td", null, p.nome, p.semConta && [" ", h("span", { class: "selo" }, "sem conta")]),
+                    h("td", { class: "num" }, p.tentativas), h("td", { class: "num" }, pct(p.primeira)),
                     h("td", { class: "num" }, pct(p.ultima)), h("td", { class: "num" }, pct(p.melhor)), h("td", { class: "num" }, pct(p.media)),
                     h("td", null, data(p.ultimaEm)))))))),
 
@@ -1202,6 +1315,7 @@ const ROTAS = [
     [/^\/q\/(\w+)$/, telaResponder],
     [/^\/resultados$/, telaResultados],
     [/^\/resultado\/(\d+)$/, telaResultado],
+    [/^\/resultado-sem-conta$/, telaResultadoSemConta],
     [/^\/respostas\/(\w+)$/, telaRespostas],
     [/^\/conta$/, telaMinhaConta],
 ];
@@ -1212,10 +1326,11 @@ let navegacao = 0;
 async function navegar() {
     const caminho = caminhoAtual();
     const aberta = ROTAS_ABERTAS.includes(caminho);
-    if (!sessao && !aberta) {
+    // Abrir um quiz pelo link e ver o resultado logo depois funcionam sem conta; o resto pede login.
+    const dispensaConta = aberta || /^\/q\/\w+$/.test(caminho) || caminho === "/resultado-sem-conta";
+    if (!sessao && !dispensaConta) {
         lembrarDestino(caminho);
-        // Quem chega por um link de quiz provavelmente ainda não tem conta.
-        location.replace(caminho.startsWith("/q/") ? "#/criar-conta" : "#/entrar");
+        location.replace("#/entrar");
         return;
     }
     if (sessao && aberta) {
@@ -1225,6 +1340,7 @@ async function navegar() {
 
     document.getElementById("menu").hidden = !sessao;
     document.getElementById("conta").hidden = !sessao;
+    document.getElementById("visitante").hidden = Boolean(sessao) || aberta;
     document.getElementById("conta-nome").textContent = sessao ? sessao.usuario.nome : "";
     for (const link of document.querySelectorAll("#menu a")) {
         link.classList.toggle("ativo", link.dataset.rota === caminho);
@@ -1256,6 +1372,11 @@ document.getElementById("sair").addEventListener("click", async () => {
     }
     guardarSessao(null);
     location.hash = "#/entrar";
+});
+
+document.querySelector("#visitante a[href='#/entrar']").addEventListener("click", () => {
+    // Quem resolve entrar no meio de um quiz volta para ele depois do login.
+    if (caminhoAtual().startsWith("/q/")) lembrarDestino(caminhoAtual());
 });
 
 window.addEventListener("hashchange", navegar);

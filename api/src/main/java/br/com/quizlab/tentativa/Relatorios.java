@@ -18,6 +18,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /** Calcula o relatório de um quiz a partir de todas as tentativas feitas nele. */
@@ -52,8 +53,8 @@ public class Relatorios {
             questoes.add(questao(questoes.size() + 1, questao, respostas));
         }
 
-        Map<Long, List<Tentativa>> porPessoa = new LinkedHashMap<>();
-        feitas.forEach(t -> porPessoa.computeIfAbsent(t.getUsuario().getId(), id -> new ArrayList<>()).add(t));
+        Map<String, List<Tentativa>> porPessoa = new LinkedHashMap<>();
+        feitas.forEach(t -> porPessoa.computeIfAbsent(pessoaDe(t), chave -> new ArrayList<>()).add(t));
         List<PessoaDoRelatorio> pessoas = porPessoa.values().stream().map(Relatorios::pessoa)
                 .sorted(Comparator.comparing(PessoaDoRelatorio::tentativas).reversed()
                         .thenComparing(PessoaDoRelatorio::nome, String.CASE_INSENSITIVE_ORDER))
@@ -105,11 +106,21 @@ public class Relatorios {
                 erradas, emBranco, alternativas);
     }
 
+    /**
+     * O que identifica uma pessoa no relatório. Com conta, é a conta. Sem conta, só há o nome digitado: "Ana Lima"
+     * e " ana  lima " contam como a mesma pessoa, e duas pessoas que digitarem o mesmo nome se misturam.
+     */
+    private static String pessoaDe(Tentativa tentativa) {
+        return tentativa.isSemConta()
+                ? "nome:" + tentativa.getRespondente().trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT)
+                : "conta:" + tentativa.getUsuario().getId();
+    }
+
     /** As tentativas de uma mesma pessoa, já em ordem de data. */
     private static PessoaDoRelatorio pessoa(List<Tentativa> dela) {
         List<Double> notas = dela.stream().map(Relatorios::nota).toList();
         Tentativa ultima = dela.get(dela.size() - 1);
-        return new PessoaDoRelatorio(ultima.getUsuario().getNome(), dela.size(),
+        return new PessoaDoRelatorio(ultima.getRespondente(), ultima.isSemConta(), dela.size(),
                 notas.stream().mapToDouble(Double::doubleValue).max().orElse(0), media(notas), notas.get(0),
                 notas.get(notas.size() - 1), ultima.getFeitaEm());
     }

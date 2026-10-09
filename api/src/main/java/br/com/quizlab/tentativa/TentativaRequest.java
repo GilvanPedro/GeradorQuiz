@@ -11,6 +11,10 @@ import java.util.List;
  * cada afirmação. O que não vier conta como em branco.
  */
 public record TentativaRequest(
+        /** Obrigatório só para quem responde sem conta. */
+        @Size(max = 80, message = "O nome pode ter no máximo 80 caracteres.")
+        String nome,
+
         @NotNull(message = "Envie as respostas.")
         @Size(max = 1000, message = "Respostas demais.")
         List<@Valid @NotNull(message = "Resposta inválida.") RespostaRequest> respostas) {
