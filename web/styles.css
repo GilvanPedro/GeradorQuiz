@@ -89,8 +89,11 @@ small { color: var(--texto-suave); font-size: .85rem; }
     color: var(--texto-suave); text-decoration: none; font-weight: 500; white-space: nowrap;
 }
 .menu a:hover { color: var(--texto); }
+/* No computador, o nome da pessoa (à direita) já leva a Minha conta; no celular o nome some e o item aparece. */
+.menu a[data-rota="/conta"] { display: none; }
 .menu a.ativo { background: var(--destaque-fundo); color: var(--destaque-forte); }
 .conta { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.conta-nome:hover { color: var(--texto); }
 .conta-nome { color: var(--texto-suave); text-decoration: none; max-width: 14ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .aviso-lento { background: var(--medio-fundo); color: var(--medio); text-align: center; padding: 8px 16px; font-size: .9rem; }
@@ -420,6 +423,7 @@ input[type="radio"], input[type="checkbox"] { accent-color: var(--destaque); wid
     h1 { font-size: 1.4rem; }
     .menu { order: 3; flex-basis: 100%; overflow-x: auto; margin: 0 -4px; }
     .conta-nome { display: none; }
+    .menu a[data-rota="/conta"] { display: block; }
     .detalhe-questao { padding-left: 4px; }
     .dados-quiz { grid-template-columns: 1fr; }
     .afirmacao, .corrigida { flex-wrap: wrap; }
