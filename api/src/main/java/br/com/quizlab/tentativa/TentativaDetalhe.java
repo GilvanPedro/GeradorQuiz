@@ -10,7 +10,8 @@ import java.util.List;
  * A análise de uma tentativa: cada questão com o que foi marcado, o gabarito e a explicação. {@code chave} só vem
  * preenchida na resposta a quem acabou de responder sem conta: é o que permite guardar a tentativa numa conta.
  */
-public record TentativaDetalhe(Long id, QuizDaTentativa quiz, String respondente, boolean semConta, boolean minha,
+public record TentativaDetalhe(Long id, QuizDaTentativa quiz, String respondente, String email, boolean semConta,
+                               boolean minha,
                                BigDecimal pontos, int total, Instant feitaEm, List<QuestaoCorrigida> questoes,
                                String chave) {
 

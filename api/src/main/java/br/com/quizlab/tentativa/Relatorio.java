@@ -38,8 +38,11 @@ public record Relatorio(QuizDoRelatorio quiz, Instant geradoEm, Resumo resumo, L
     public record AlternativaDoRelatorio(String texto, boolean correta, int marcadas, int falsas) {
     }
 
-    /** Quem respondeu sem conta ({@code semConta}) é agrupado pelo nome que digitou. */
-    public record PessoaDoRelatorio(String nome, boolean semConta, int tentativas, double melhor, double media, double primeira,
+    /**
+     * Quem tem conta é separado pelo e-mail, que é único. Quem respondeu sem conta ({@code semConta}) não tem
+     * e-mail e é agrupado pelo nome que digitou.
+     */
+    public record PessoaDoRelatorio(String nome, String email, boolean semConta, int tentativas, double melhor, double media, double primeira,
                                     double ultima, Instant ultimaEm) {
     }
 }

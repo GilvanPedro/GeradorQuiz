@@ -24,7 +24,10 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.endsWith;
+import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
@@ -657,6 +660,8 @@ class QuizLabTest {
                 .andExpect(jsonPath("$.pessoas[0].ultima").value(100.0))
                 .andExpect(jsonPath("$.pessoas[0].melhor").value(100.0))
                 .andExpect(jsonPath("$.pessoas[0].media").value(50.0))
+                .andExpect(jsonPath("$.pessoas[0].email", endsWith("@exemplo.com")))
+                .andExpect(jsonPath("$.tentativas[0].email", endsWith("@exemplo.com")))
                 .andExpect(jsonPath("$.pessoas[1].nome").value("Caio"))
                 .andExpect(jsonPath("$.pessoas[1].tentativas").value(1))
                 .andExpect(jsonPath("$.tentativas", hasSize(3)));
@@ -729,6 +734,8 @@ class QuizLabTest {
         responderSemConta(codigo, "Maria", "[]");
         // Uma pessoa com conta e o mesmo nome não se mistura com o convidado.
         responder(novaPessoa("Maria"), codigo, "{\"respostas\": []}");
+        mvc.perform(comToken(get("/api/quizzes/" + codigo + "/relatorio"), ana))
+                .andExpect(jsonPath("$.pessoas[?(@.semConta == true)].email", everyItem(nullValue())));
 
         String relatorio = corpo(mvc.perform(comToken(get("/api/quizzes/" + codigo + "/relatorio"), ana))
                 .andExpect(status().isOk())
@@ -795,6 +802,31 @@ class QuizLabTest {
         mvc.perform(comToken(delete("/api/quizzes/" + codigo), ana)).andExpect(status().isNoContent());
 
         assertThat(contar("select count(*) from tentativa where id = ?", (long) tentativa)).isZero();
+    }
+
+    @Test
+    void relatorioSeparaPeloEmailQuemTemContaComOMesmoNome() throws Exception {
+        String ana = novaPessoa("Ana");
+        String codigo = criarQuiz(ana, true);
+        String emailA = emailNovo();
+        String emailB = emailNovo();
+        String joaoA = JsonPath.read(corpo(criarConta("João Silva", emailA, "segredo-123")), "$.token");
+        String joaoB = JsonPath.read(corpo(criarConta("João Silva", emailB, "segredo-123")), "$.token");
+        responder(joaoA, codigo, "{\"respostas\": []}");
+        responder(joaoA, codigo, "{\"respostas\": []}");
+        int deB = JsonPath.read(corpo(responder(joaoB, codigo, "{\"respostas\": []}")), "$.id");
+
+        String relatorio = corpo(mvc.perform(comToken(get("/api/quizzes/" + codigo + "/relatorio"), ana))
+                .andExpect(jsonPath("$.resumo.pessoas").value(2))
+                .andExpect(jsonPath("$.pessoas[0].nome").value("João Silva"))
+                .andExpect(jsonPath("$.pessoas[0].email").value(emailA))
+                .andExpect(jsonPath("$.pessoas[0].tentativas").value(2))
+                .andExpect(jsonPath("$.pessoas[1].nome").value("João Silva"))
+                .andExpect(jsonPath("$.pessoas[1].email").value(emailB))
+                .andExpect(jsonPath("$.pessoas[1].tentativas").value(1)));
+        List<String> emails = JsonPath.read(relatorio, "$.tentativas[*].email");
+        assertThat(emails).containsExactlyInAnyOrder(emailA, emailA, emailB);
+        mvc.perform(comToken(get("/api/tentativas/" + deB), ana)).andExpect(jsonPath("$.email").value(emailB));
     }
 
     // ---------- apoio ----------

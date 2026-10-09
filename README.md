@@ -36,6 +36,8 @@ Site para criar quizzes de questões objetivas, compartilhar por link e acompanh
 
 Regras que valem saber:
 
+- No relatório, quem tem conta é separado pelo e-mail (um por conta), e o autor do quiz vê esse e-mail; a tela de
+  responder avisa disso. Duas contas com o mesmo nome não se misturam.
 - Sem conta, a pessoa só é reconhecida pelo nome: "Ana Lima" e "ana  lima" contam como a mesma, e duas pessoas
   que digitarem o mesmo nome se misturam no relatório.
 - Para ninguém encher um relatório de respostas falsas, há um teto de 30 envios sem conta a cada 10 minutos por

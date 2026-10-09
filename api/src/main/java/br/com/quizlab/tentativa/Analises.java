@@ -53,7 +53,8 @@ public class Analises {
         return new TentativaDetalhe(tentativa.getId(),
                 new QuizDaTentativa(quiz == null ? null : quiz.getCodigo(), tentativa.getQuizTitulo(),
                         tentativa.getQuizTema(), tentativa.getQuizAutor(), quiz != null),
-                tentativa.getRespondente(), tentativa.isSemConta(), minha,
+                tentativa.getRespondente(), tentativa.isSemConta() ? null : tentativa.getUsuario().getEmail(),
+                tentativa.isSemConta(), minha,
                 tentativa.getPontos(), tentativa.getTotal(), tentativa.getFeitaEm(), questoes, chave);
     }
 

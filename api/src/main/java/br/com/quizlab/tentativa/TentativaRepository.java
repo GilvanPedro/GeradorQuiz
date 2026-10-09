@@ -12,7 +12,7 @@ public interface TentativaRepository extends JpaRepository<Tentativa, Long> {
 
     String RESUMO = """
             select new br.com.quizlab.tentativa.TentativaResumo(t.id, q.codigo, t.quizTitulo, t.quizTema,
-                t.quizAutor, coalesce(u.nome, t.convidadoNome), case when u.id is null then true else false end,
+                t.quizAutor, coalesce(u.nome, t.convidadoNome), u.email, case when u.id is null then true else false end,
                 t.pontos, t.total, t.feitaEm)
             from Tentativa t left join t.quiz q left join t.usuario u""";
 
