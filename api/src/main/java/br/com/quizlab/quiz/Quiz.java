@@ -28,7 +28,11 @@ public class Quiz {
     private String descricao;
     private String tema;
     private boolean publico;
+    /** Sorteiam a ordem a cada vez que alguém abre o quiz para responder. O resultado segue a ordem do autor. */
+    private boolean embaralharQuestoes;
+    private boolean embaralharAlternativas;
     private Instant criadoEm;
+    /** Só existe para a limpeza dos quizzes excluídos pela versão antiga; hoje excluir apaga a linha. */
     private Instant excluidoEm;
     @OneToMany(mappedBy = "quiz", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("ordem")
@@ -49,6 +53,8 @@ public class Quiz {
         descricao = textoOuNulo(pedido.descricao());
         tema = textoOuNulo(pedido.tema());
         publico = pedido.publico();
+        embaralharQuestoes = pedido.embaralharQuestoes();
+        embaralharAlternativas = pedido.embaralharAlternativas();
 
         questoes.clear();
         for (QuizRequest.QuestaoRequest q : pedido.questoes()) {
@@ -63,10 +69,6 @@ public class Quiz {
 
     void definirPublico(boolean publico) {
         this.publico = publico;
-    }
-
-    void excluir() {
-        excluidoEm = Instant.now();
     }
 
     private static String textoOuNulo(String texto) {
@@ -101,8 +103,12 @@ public class Quiz {
         return publico;
     }
 
-    public boolean isExcluido() {
-        return excluidoEm != null;
+    public boolean isEmbaralharQuestoes() {
+        return embaralharQuestoes;
+    }
+
+    public boolean isEmbaralharAlternativas() {
+        return embaralharAlternativas;
     }
 
     public List<Questao> getQuestoes() {

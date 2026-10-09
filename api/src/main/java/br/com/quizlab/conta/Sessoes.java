@@ -21,19 +21,24 @@ import java.util.Optional;
 public class Sessoes {
 
     static final Duration VALIDADE = Duration.ofDays(30);
+    /** O último acesso é regravado no máximo uma vez por dia, para não escrever no banco a cada clique. */
+    static final Duration INTERVALO_DO_ULTIMO_ACESSO = Duration.ofDays(1);
     private static final String PREFIXO = "Bearer ";
 
     private final SessaoRepository sessoes;
+    private final UsuarioRepository usuarios;
     private final SecureRandom sorteio = new SecureRandom();
 
-    public Sessoes(SessaoRepository sessoes) {
+    public Sessoes(SessaoRepository sessoes, UsuarioRepository usuarios) {
         this.sessoes = sessoes;
+        this.usuarios = usuarios;
     }
 
     @Transactional
     public String abrir(Usuario usuario) {
         Instant agora = Instant.now();
         sessoes.apagarExpiradas(agora);
+        usuarios.registrarAcesso(usuario.getId(), agora);
 
         byte[] bytes = new byte[32];
         sorteio.nextBytes(bytes);
@@ -42,12 +47,18 @@ public class Sessoes {
         return token;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public Optional<UsuarioLogado> usuarioDe(String token) {
         if (token == null || token.isBlank()) {
             return Optional.empty();
         }
-        return sessoes.usuarioDaSessao(resumo(token), Instant.now());
+        Instant agora = Instant.now();
+        return sessoes.sessaoAtiva(resumo(token), agora).map(sessao -> {
+            if (sessao.ultimoAcessoEm().isBefore(agora.minus(INTERVALO_DO_ULTIMO_ACESSO))) {
+                usuarios.registrarAcesso(sessao.id(), agora);
+            }
+            return new UsuarioLogado(sessao.id(), sessao.nome(), sessao.email());
+        });
     }
 
     @Transactional
@@ -55,6 +66,17 @@ public class Sessoes {
         if (token != null && !token.isBlank()) {
             sessoes.deleteById(resumo(token));
         }
+    }
+
+    /** Depois de trocar a senha: derruba os outros aparelhos e mantém só o que fez a troca. */
+    @Transactional
+    public void encerrarOutras(Long usuarioId, String tokenAtual) {
+        sessoes.apagarOutras(usuarioId, tokenAtual == null ? "" : resumo(tokenAtual));
+    }
+
+    @Transactional
+    public void encerrarTodas(Long usuarioId) {
+        sessoes.apagarDoUsuario(usuarioId);
     }
 
     /** Lê o token do cabeçalho {@code Authorization: Bearer <token>}. */

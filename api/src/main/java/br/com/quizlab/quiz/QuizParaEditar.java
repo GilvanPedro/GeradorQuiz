@@ -4,7 +4,7 @@ import java.util.List;
 
 /** O quiz completo, com gabarito. Só o autor recebe. */
 public record QuizParaEditar(String codigo, String titulo, String descricao, String tema, boolean publico,
-                             boolean editavel, List<QuestaoCompleta> questoes) {
+                             boolean embaralharQuestoes, boolean embaralharAlternativas, boolean editavel, List<QuestaoCompleta> questoes) {
 
     public record QuestaoCompleta(TipoQuestao tipo, String enunciado, String explicacao,
                                   List<AlternativaCompleta> alternativas) {
@@ -20,6 +20,6 @@ public record QuizParaEditar(String codigo, String titulo, String descricao, Str
                                 .map(a -> new AlternativaCompleta(a.getTexto(), a.isCorreta())).toList()))
                 .toList();
         return new QuizParaEditar(quiz.getCodigo(), quiz.getTitulo(), quiz.getDescricao(), quiz.getTema(),
-                quiz.isPublico(), editavel, questoes);
+                quiz.isPublico(), quiz.isEmbaralharQuestoes(), quiz.isEmbaralharAlternativas(), editavel, questoes);
     }
 }

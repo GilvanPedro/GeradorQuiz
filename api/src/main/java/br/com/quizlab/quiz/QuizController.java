@@ -2,6 +2,7 @@ package br.com.quizlab.quiz;
 
 import br.com.quizlab.conta.UsuarioLogado;
 import br.com.quizlab.conta.UsuarioRepository;
+import br.com.quizlab.tentativa.Analises;
 import br.com.quizlab.tentativa.TentativaRepository;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
@@ -35,12 +36,15 @@ public class QuizController {
     private final QuizRepository quizzes;
     private final UsuarioRepository usuarios;
     private final TentativaRepository tentativas;
+    private final Analises analises;
     private final SecureRandom sorteio = new SecureRandom();
 
-    public QuizController(QuizRepository quizzes, UsuarioRepository usuarios, TentativaRepository tentativas) {
+    public QuizController(QuizRepository quizzes, UsuarioRepository usuarios, TentativaRepository tentativas,
+                          Analises analises) {
         this.quizzes = quizzes;
         this.usuarios = usuarios;
         this.tentativas = tentativas;
+        this.analises = analises;
     }
 
     @GetMapping
@@ -109,12 +113,15 @@ public class QuizController {
         doAutor(codigo, eu).definirPublico(pedido.publico());
     }
 
-    /** Só esconde o quiz: quem já respondeu continua vendo o próprio resultado. */
+    /**
+     * Apaga o quiz, as questões e as respostas do banco. Quem já respondeu continua vendo o próprio resultado, a
+     * partir de uma cópia da análise guardada na tentativa.
+     */
     @DeleteMapping("/{codigo}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @Transactional
     public void excluir(@PathVariable String codigo, @RequestAttribute(UsuarioLogado.ATRIBUTO) UsuarioLogado eu) {
-        doAutor(codigo, eu).excluir();
+        analises.apagarQuiz(doAutor(codigo, eu).getId());
     }
 
     private Quiz doAutor(String codigo, UsuarioLogado eu) {

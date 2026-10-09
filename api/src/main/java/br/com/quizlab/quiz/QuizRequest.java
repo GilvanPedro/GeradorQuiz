@@ -20,6 +20,11 @@ public record QuizRequest(
 
         boolean publico,
 
+        // Opcionais: sem o campo, valem false.
+        boolean embaralharQuestoes,
+
+        boolean embaralharAlternativas,
+
         @NotNull(message = "O quiz precisa de pelo menos uma questão.")
         @Size(min = 1, max = 100, message = "O quiz precisa ter de 1 a 100 questões.")
         List<@Valid @NotNull(message = "Questão inválida.") QuestaoRequest> questoes) {

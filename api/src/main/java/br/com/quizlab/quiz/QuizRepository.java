@@ -21,6 +21,11 @@ public interface QuizRepository extends JpaRepository<Quiz, Long> {
 
     boolean existsByCodigo(String codigo);
 
+    List<Quiz> findByAutorId(Long autorId);
+
+    /** Quizzes excluídos pela versão antiga, que só marcava a exclusão. Ver LimpezaDeQuizzesExcluidos. */
+    List<Quiz> findByExcluidoEmIsNotNull();
+
     @Query(RESUMO + " and q.publico = true order by q.criadoEm desc")
     List<QuizResumo> publicos(Pageable limite);
 

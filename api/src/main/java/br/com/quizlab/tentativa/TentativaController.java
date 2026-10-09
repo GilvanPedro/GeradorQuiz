@@ -33,11 +33,16 @@ public class TentativaController {
     private final TentativaRepository tentativas;
     private final QuizRepository quizzes;
     private final UsuarioRepository usuarios;
+    private final Analises analises;
+    private final Relatorios relatorios;
 
-    public TentativaController(TentativaRepository tentativas, QuizRepository quizzes, UsuarioRepository usuarios) {
+    public TentativaController(TentativaRepository tentativas, QuizRepository quizzes, UsuarioRepository usuarios,
+                               Analises analises, Relatorios relatorios) {
         this.tentativas = tentativas;
         this.quizzes = quizzes;
         this.usuarios = usuarios;
+        this.analises = analises;
+        this.relatorios = relatorios;
     }
 
     /** Recebe as respostas, corrige e já devolve a análise. */
@@ -80,7 +85,7 @@ public class TentativaController {
 
         Tentativa tentativa = tentativas.save(new Tentativa(quiz, usuarios.getReferenceById(eu.id()), pontos,
                 quiz.getQuestoes().size(), marcacoes));
-        return TentativaDetalhe.de(tentativa, eu.id());
+        return analises.detalhe(tentativa, eu.id());
     }
 
     @GetMapping("/tentativas")
@@ -89,15 +94,19 @@ public class TentativaController {
         return tentativas.doUsuario(eu.id());
     }
 
-    /** Quem fez a tentativa vê a própria análise; o autor do quiz vê a de todo mundo que respondeu. */
+    /**
+     * Quem fez a tentativa vê a própria análise; o autor do quiz vê a de todo mundo que respondeu, enquanto o quiz
+     * existir.
+     */
     @GetMapping("/tentativas/{id}")
     @Transactional(readOnly = true)
     public TentativaDetalhe detalhe(@PathVariable Long id, @RequestAttribute(UsuarioLogado.ATRIBUTO) UsuarioLogado eu) {
         Tentativa tentativa = tentativas.findById(id)
-                .filter(t -> t.getUsuario().getId().equals(eu.id()) || t.getQuiz().getAutor().getId().equals(eu.id()))
+                .filter(t -> t.getUsuario().getId().equals(eu.id())
+                        || t.getQuiz() != null && t.getQuiz().getAutor().getId().equals(eu.id()))
                 // Mesma resposta para "não existe" e "não é sua", para não revelar quais ids existem.
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Resultado não encontrado."));
-        return TentativaDetalhe.de(tentativa, eu.id());
+        return analises.detalhe(tentativa, eu.id());
     }
 
     /** Para o autor acompanhar quem respondeu o quiz dele. */
@@ -105,10 +114,22 @@ public class TentativaController {
     @Transactional(readOnly = true)
     public List<TentativaResumo> doQuiz(@PathVariable String codigo,
                                         @RequestAttribute(UsuarioLogado.ATRIBUTO) UsuarioLogado eu) {
+        return tentativas.doQuiz(doAutor(codigo, eu).getId());
+    }
+
+    /** Médias, questões mais erradas, desempenho por pessoa e a lista de tentativas, para o autor analisar. */
+    @GetMapping("/quizzes/{codigo}/relatorio")
+    @Transactional(readOnly = true)
+    public Relatorio relatorio(@PathVariable String codigo,
+                               @RequestAttribute(UsuarioLogado.ATRIBUTO) UsuarioLogado eu) {
+        return relatorios.de(doAutor(codigo, eu));
+    }
+
+    private Quiz doAutor(String codigo, UsuarioLogado eu) {
         Quiz quiz = quizzes.exigir(codigo);
         if (!quiz.getAutor().getId().equals(eu.id())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Só quem criou o quiz pode ver as respostas.");
         }
-        return tentativas.doQuiz(quiz.getId());
+        return quiz;
     }
 }

@@ -1,5 +1,7 @@
 package br.com.quizlab.quiz;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /** O quiz como quem responde vê: sem gabarito e sem explicações. */
@@ -13,10 +15,18 @@ public record QuizParaResponder(String codigo, String titulo, String descricao, 
     }
 
     static QuizParaResponder de(Quiz quiz, Long quemPede) {
-        List<QuestaoAberta> questoes = quiz.getQuestoes().stream()
-                .map(q -> new QuestaoAberta(q.getId(), q.getTipo(), q.getEnunciado(),
-                        q.getAlternativas().stream().map(a -> new AlternativaAberta(a.getId(), a.getTexto())).toList()))
-                .toList();
+        List<QuestaoAberta> questoes = new ArrayList<>();
+        for (Questao q : quiz.getQuestoes()) {
+            List<AlternativaAberta> alternativas = new ArrayList<>(q.getAlternativas().stream()
+                    .map(a -> new AlternativaAberta(a.getId(), a.getTexto())).toList());
+            if (quiz.isEmbaralharAlternativas()) {
+                Collections.shuffle(alternativas);
+            }
+            questoes.add(new QuestaoAberta(q.getId(), q.getTipo(), q.getEnunciado(), alternativas));
+        }
+        if (quiz.isEmbaralharQuestoes()) {
+            Collections.shuffle(questoes);
+        }
         return new QuizParaResponder(quiz.getCodigo(), quiz.getTitulo(), quiz.getDescricao(), quiz.getTema(),
                 quiz.getAutor().getNome(), quiz.getAutor().getId().equals(quemPede), questoes);
     }

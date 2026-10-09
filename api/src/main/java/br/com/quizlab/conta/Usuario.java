@@ -17,6 +17,8 @@ public class Usuario {
     private String email;
     private String senhaHash;
     private Instant criadoEm;
+    /** Atualizado no login e, no máximo uma vez por dia, enquanto a pessoa usa o site. */
+    private Instant ultimoAcessoEm;
 
     protected Usuario() {
     }
@@ -26,6 +28,15 @@ public class Usuario {
         this.email = email;
         this.senhaHash = senhaHash;
         this.criadoEm = Instant.now();
+        this.ultimoAcessoEm = criadoEm;
+    }
+
+    void renomear(String nome) {
+        this.nome = nome;
+    }
+
+    void trocarSenha(String senhaHash) {
+        this.senhaHash = senhaHash;
     }
 
     public Long getId() {
@@ -42,5 +53,9 @@ public class Usuario {
 
     public String getSenhaHash() {
         return senhaHash;
+    }
+
+    public Instant getUltimoAcessoEm() {
+        return ultimoAcessoEm;
     }
 }
